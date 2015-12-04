@@ -138,3 +138,46 @@ impl Signals {
         });
     }
 }
+
+#[cfg(test)]
+mod test {
+    extern crate libc;
+    use std::sync::mpsc::sync_channel;
+    use self::libc::c_int;
+    use self::libc::{SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM};
+    use super::{Signal, Signals};
+    use super::platform::handler;
+
+    fn to_os_signal(signal: Signal) -> c_int {
+        match signal {
+            Signal::Hup => SIGHUP,
+            Signal::Int => SIGINT,
+            Signal::Quit => SIGQUIT,
+            Signal::Ill => SIGILL,
+            Signal::Abrt => SIGABRT,
+            Signal::Fpe => SIGFPE,
+            Signal::Kill => SIGKILL,
+            Signal::Segv => SIGSEGV,
+            Signal::Pipe => SIGPIPE,
+            Signal::Alrm => SIGALRM,
+            Signal::Term => SIGTERM,
+        }
+    }
+
+    #[test]
+    fn all_signals() {
+        let signals = [Signal::Hup, Signal::Int, Signal::Quit, Signal::Abrt, Signal::Term];
+        let (tx, rx) = sync_channel(0);
+        Signals::set_handler(&signals, move |signals| tx.send(signals.to_owned()).unwrap());
+        // check one by one
+        for &signal in signals.iter() {
+            handler(to_os_signal(signal));
+            assert_eq!(rx.recv().unwrap(), vec![signal]);
+        }
+        // check all simultaneously
+        for &signal in signals.iter() {
+            handler(to_os_signal(signal))
+        }
+        assert_eq!(rx.recv().unwrap(), signals.to_owned());
+    }
+}
