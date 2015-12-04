@@ -3,9 +3,9 @@
 // 100% of CPU. This is because cargo seems to kill the process even
 // though you have set up Ctrl-C handler of your own.
 
-extern crate ctrlc;
-use ctrlc::CtrlC;
+extern crate simple_signal;
+use simple_signal::{Signals, Signal};
 fn main() {
-    CtrlC::set_handler(|| println!("Hello world!"));
+    Signals::set_handler(&[Signal::Int, Signal::Term], |signals| println!("Caught: {:?}", signals));
     loop {}
 }

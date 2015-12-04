@@ -1,18 +1,19 @@
 [package]
 
-name = "ctrlc"
+name = "simple-signal"
 version = "1.0.0"
-authors = ["Antti Keränen <detegr@gmail.com>"]
+authors = ["Antti Keränen <detegr@gmail.com>", "Alexey Voznyuk <me@swizard.info"]
 license = "MIT"
-keywords = ["ctrlc", "signal", "SIGINT"]
-description = "Easy Ctrl-C handler for Rust projects"
-homepage = "https://github.com/Detegr/rust-ctrlc"
-repository = "https://github.com/Detegr/rust-ctrlc.git"
+keywords = ["signal", "SIGINT", "SIGTERM", "SIGQUIT"]
+description = "Easy unix signals handler for Rust projects"
+homepage = "https://github.com/swizard0/rust-simple-signal"
+repository = "https://github.com/swizard0/rust-simple-signal.git"
+
+[lib]
+name = "simple_signal"
 
 [dependencies]
-libc = "0.1"
-winapi = "0.2"
-kernel32-sys = "0.1"
+libc = "*"
 
 [dependencies.lazy_static]
 version = "0.1"
