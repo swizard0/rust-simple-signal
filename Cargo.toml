@@ -1,8 +1,8 @@
 [package]
 
 name = "simple-signal"
-version = "1.0.3"
-authors = ["Antti Keränen <detegr@gmail.com>", "Alexey Voznyuk <me@swizard.info"]
+version = "1.0.4"
+authors = ["Antti Keränen <detegr@gmail.com>", "Alexey Voznyuk <me@swizard.info>"]
 license = "MIT"
 keywords = ["signal", "SIGINT", "SIGTERM", "SIGQUIT", "SIGABRT"]
 description = "Easy unix signals handler for Rust projects"
