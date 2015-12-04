@@ -1,4 +1,4 @@
-# simple-signale
+# simple-signal
 A simple easy to use wrapper around unix signals.
 
 ## Example usage

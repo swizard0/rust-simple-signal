@@ -1,10 +1,10 @@
 [package]
 
 name = "simple-signal"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Antti Keränen <detegr@gmail.com>", "Alexey Voznyuk <me@swizard.info"]
 license = "MIT"
-keywords = ["signal", "SIGINT", "SIGTERM", "SIGQUIT"]
+keywords = ["signal", "SIGINT", "SIGTERM", "SIGQUIT", "SIGABRT"]
 description = "Easy unix signals handler for Rust projects"
 homepage = "https://github.com/swizard0/rust-simple-signal"
 repository = "https://github.com/swizard0/rust-simple-signal.git"
