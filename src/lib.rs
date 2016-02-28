@@ -52,8 +52,7 @@ mod platform {
     use std::sync::atomic::Ordering;
     use super::Signal;
 
-    #[repr(C)]
-    pub fn handler(sig: c_int) {
+    pub extern "C" fn handler(sig: c_int) {
         let mask = match sig {
             SIGHUP => 1,
             SIGINT => 2,
