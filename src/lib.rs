@@ -93,7 +93,7 @@ mod platform {
             Signal::Term => SIGTERM,
         };
 
-        signal(os_sig, ::std::mem::transmute::<_, sighandler_t>(handler));
+        signal(os_sig, ::std::mem::transmute::<_, sighandler_t>(handler as extern "C" fn(_)));
     }
 }
 
