@@ -1,4 +1,5 @@
 extern crate simple_signal;
+
 use simple_signal::{Signals, Signal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
