@@ -1,7 +1,7 @@
 # simple-signal
-A simple easy to use wrapper around unix signals.
+A simple wrapper for handling Unix process signals.
 
-## Example usage
+## Example Usage
 ```rust
 extern crate simple_signal;
 use simple_signal::{Signals, Signal};
@@ -24,4 +24,4 @@ fn main() {
 `cargo run --example readme_example`
 
 ## Building
-If you're using a nightly compiler, I suggest building with `cargo build --features nightly` to avoid the dependency to lazy_static. On stable and beta compilers `cargo build` will do.
+If you're using a nightly compiler, I suggest building with `cargo build --features nightly` to avoid the dependency on *lazy_static*. On stable and beta compilers, just run `cargo build`.
