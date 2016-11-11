@@ -1,4 +1,4 @@
-//! A simple easy to use wrapper around unix signals.
+//! A simple wrapper for handling Unix process signals.
 
 #![cfg_attr(feature="nightly", feature(static_condvar))]
 #![cfg_attr(feature="nightly", feature(static_mutex))]
@@ -8,6 +8,7 @@
 extern crate lazy_static;
 
 use std::sync::atomic::Ordering;
+use std::thread;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Signal {
@@ -32,6 +33,7 @@ mod features {
     pub static MUTEX: StaticMutex = MUTEX_INIT;
     pub static MASK: AtomicUsize = ATOMIC_USIZE_INIT;
 }
+
 #[cfg(not(feature="nightly"))]
 mod features {
     use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT};
@@ -42,13 +44,16 @@ mod features {
     }
     pub static MASK: AtomicUsize = ATOMIC_USIZE_INIT;
 }
+
 use self::features::*;
 
 #[cfg(unix)]
 mod platform {
     extern crate libc;
+
     use self::libc::{c_int, signal, sighandler_t};
     use self::libc::{SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM};
+    use std::mem;
     use std::sync::atomic::Ordering;
     use super::Signal;
 
@@ -72,11 +77,12 @@ mod platform {
             let prev_mask = super::features::MASK.load(Ordering::Relaxed);
             let new_mask = prev_mask | mask;
             if super::features::MASK.compare_and_swap(prev_mask, new_mask, Ordering::Relaxed) == new_mask {
-                break
+                break;
             }
         }
         super::features::CVAR.notify_all();
     }
+
     #[inline]
     pub unsafe fn set_os_handler(sig: Signal) {
         let os_sig = match sig {
@@ -93,58 +99,58 @@ mod platform {
             Signal::Term => SIGTERM,
         };
 
-        signal(os_sig, ::std::mem::transmute::<_, sighandler_t>(handler as extern "C" fn(_)));
+        signal(os_sig, mem::transmute::<_, sighandler_t>(handler as extern "C" fn(_)));
     }
 }
 
 use self::platform::*;
 
-pub struct Signals;
-impl Signals {
-    /// Sets up some signals handler
-    /// # Example
-    /// ```
-    /// use simple_signal::{Signals, Signal};
-    /// Signals::set_handler(&[Signal::Int, Signal::Term], |signals| println!("Caught: {:?}", signals));
-    /// ```
-    pub fn set_handler<F>(signals: &[Signal], user_handler: F) where F: Fn(&[Signal]) + 'static + Send {
-        for &signal in signals.iter() {
-            unsafe { set_os_handler(signal) }
-        }
-        ::std::thread::spawn(move || {
-            let mut signals = Vec::new();
-            loop {
-                let mask = MASK.load(Ordering::Relaxed);
-                if mask == 0 {
-                    let _ = CVAR.wait(MUTEX.lock().unwrap());
-                    continue
-                }
-                signals.clear();
-                if mask & 1 != 0 { signals.push(Signal::Hup) }
-                if mask & 2 != 0 { signals.push(Signal::Int) }
-                if mask & 4 != 0 { signals.push(Signal::Quit) }
-                if mask & 8 != 0 { signals.push(Signal::Ill) }
-                if mask & 16 != 0 { signals.push(Signal::Abrt) }
-                if mask & 32 != 0 { signals.push(Signal::Fpe) }
-                if mask & 64 != 0 { signals.push(Signal::Kill) }
-                if mask & 128 != 0 { signals.push(Signal::Segv) }
-                if mask & 256 != 0 { signals.push(Signal::Pipe) }
-                if mask & 512 != 0 { signals.push(Signal::Alrm) }
-                if mask & 1024 != 0 { signals.push(Signal::Term) }
-                MASK.store(0, Ordering::Relaxed);
-                user_handler(&signals);
-            }
-        });
+/// Sets up a signal handler.
+///
+/// # Example
+/// ```
+/// use simple_signal::{self, Signal};
+/// simple_signal::set_handler(&[Signal::Int, Signal::Term], |signals| println!("Caught: {:?}", signals));
+/// ```
+pub fn set_handler<F>(signals: &[Signal], user_handler: F) where F: Fn(&[Signal]) + 'static + Send {
+    for &signal in signals.iter() {
+        unsafe { set_os_handler(signal) }
     }
+    thread::spawn(move || {
+        let mut signals = Vec::new();
+        loop {
+            let mask = MASK.load(Ordering::Relaxed);
+            if mask == 0 {
+                let _ = CVAR.wait(MUTEX.lock().unwrap());
+                thread::yield_now();
+                continue;
+            }
+            signals.clear();
+            if mask & 1 != 0 { signals.push(Signal::Hup) }
+            if mask & 2 != 0 { signals.push(Signal::Int) }
+            if mask & 4 != 0 { signals.push(Signal::Quit) }
+            if mask & 8 != 0 { signals.push(Signal::Ill) }
+            if mask & 16 != 0 { signals.push(Signal::Abrt) }
+            if mask & 32 != 0 { signals.push(Signal::Fpe) }
+            if mask & 64 != 0 { signals.push(Signal::Kill) }
+            if mask & 128 != 0 { signals.push(Signal::Segv) }
+            if mask & 256 != 0 { signals.push(Signal::Pipe) }
+            if mask & 512 != 0 { signals.push(Signal::Alrm) }
+            if mask & 1024 != 0 { signals.push(Signal::Term) }
+            MASK.store(0, Ordering::Relaxed);
+            user_handler(&signals);
+        }
+    });
 }
 
 #[cfg(test)]
 mod test {
     extern crate libc;
+
     use std::sync::mpsc::sync_channel;
     use self::libc::c_int;
     use self::libc::{SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM};
-    use super::{Signal, Signals};
+    use super::{Signal};
     use super::platform::handler;
 
     fn to_os_signal(signal: Signal) -> c_int {
@@ -167,13 +173,13 @@ mod test {
     fn all_signals() {
         let signals = [Signal::Hup, Signal::Int, Signal::Quit, Signal::Abrt, Signal::Term];
         let (tx, rx) = sync_channel(0);
-        Signals::set_handler(&signals, move |signals| tx.send(signals.to_owned()).unwrap());
-        // check one by one
+        super::set_handler(&signals, move |signals| tx.send(signals.to_owned()).unwrap());
+        // Check all signals one-by-one.
         for &signal in signals.iter() {
             handler(to_os_signal(signal));
             assert_eq!(rx.recv().unwrap(), vec![signal]);
         }
-        // check all simultaneously
+        // Check all signals simultaneously.
         for &signal in signals.iter() {
             handler(to_os_signal(signal))
         }
