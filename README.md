@@ -4,14 +4,15 @@ A simple wrapper for handling Unix process signals.
 ## Example Usage
 ```rust
 extern crate simple_signal;
-use simple_signal::{Signals, Signal};
+
+use simple_signal::{self, Signal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 fn main() {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
-    Signals::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
+    simple_signal::set_handler(&[Signal::Int, Signal::Term], move |_signals| {
         r.store(false, Ordering::SeqCst);
     });
     println!("Waiting for a signal...");
