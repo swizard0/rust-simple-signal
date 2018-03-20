@@ -16,7 +16,7 @@ name = "simple_signal"
 libc = "0.2"
 
 [dependencies.lazy_static]
-version = "0.2"
+version = "1.0"
 optional = true
 
 [features]
