@@ -1,14 +1,6 @@
 //! A simple wrapper for handling Unix process signals.
 
-#![cfg_attr(feature="nightly", feature(static_condvar))]
-#![cfg_attr(feature="nightly", feature(static_mutex))]
-
-#[cfg(feature="stable")]
-#[macro_use]
-extern crate lazy_static;
-
 use std::sync::atomic::Ordering;
-use std::thread;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Signal {
@@ -25,27 +17,13 @@ pub enum Signal {
     Term,
 }
 
-#[cfg(feature="nightly")]
-mod features {
-    use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT};
-    use std::sync::{StaticCondvar, CONDVAR_INIT, StaticMutex, MUTEX_INIT};
-    pub static CVAR: StaticCondvar = CONDVAR_INIT;
-    pub static MUTEX: StaticMutex = MUTEX_INIT;
-    pub static MASK: AtomicUsize = ATOMIC_USIZE_INIT;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Condvar, Mutex};
+lazy_static::lazy_static! {
+    pub static ref CVAR: Condvar = Condvar::new();
+    pub static ref MUTEX: Mutex<()> = Mutex::new(());
 }
-
-#[cfg(not(feature="nightly"))]
-mod features {
-    use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT};
-    use std::sync::{Condvar, Mutex};
-    lazy_static! {
-        pub static ref CVAR: Condvar = Condvar::new();
-        pub static ref MUTEX: Mutex<bool> = Mutex::new(false);
-    }
-    pub static MASK: AtomicUsize = ATOMIC_USIZE_INIT;
-}
-
-use self::features::*;
+pub static MASK: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(unix)]
 mod platform {
@@ -53,7 +31,6 @@ mod platform {
 
     use self::libc::{c_int, signal, sighandler_t};
     use self::libc::{SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM};
-    use std::mem;
     use std::sync::atomic::Ordering;
     use super::Signal;
 
@@ -74,13 +51,13 @@ mod platform {
         };
 
         loop {
-            let prev_mask = super::features::MASK.load(Ordering::Relaxed);
+            let prev_mask = super::MASK.load(Ordering::Relaxed);
             let new_mask = prev_mask | mask;
-            if super::features::MASK.compare_and_swap(prev_mask, new_mask, Ordering::Relaxed) == new_mask {
+            if super::MASK.compare_exchange(prev_mask, new_mask, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
                 break;
             }
         }
-        super::features::CVAR.notify_all();
+        super::CVAR.notify_all();
     }
 
     #[inline]
@@ -99,7 +76,7 @@ mod platform {
             Signal::Term => SIGTERM,
         };
 
-        signal(os_sig, mem::transmute::<_, sighandler_t>(handler as extern "C" fn(_)));
+        signal(os_sig, handler as extern "C" fn(_) as sighandler_t);
     }
 }
 
@@ -112,17 +89,17 @@ use self::platform::*;
 /// use simple_signal::{self, Signal};
 /// simple_signal::set_handler(&[Signal::Int, Signal::Term], |signals| println!("Caught: {:?}", signals));
 /// ```
-pub fn set_handler<F>(signals: &[Signal], user_handler: F) where F: Fn(&[Signal]) + 'static + Send {
+pub fn set_handler<F>(signals: &[Signal], mut user_handler: F) where F: FnMut(&[Signal]) + 'static + Send {
     for &signal in signals.iter() {
         unsafe { set_os_handler(signal) }
     }
-    thread::spawn(move || {
+    std::thread::spawn(move || {
         let mut signals = Vec::new();
+        let mut guard = MUTEX.lock().unwrap();
         loop {
-            let mask = MASK.load(Ordering::Relaxed);
+            let mask = MASK.swap(0, Ordering::Relaxed);
             if mask == 0 {
-                let _ = CVAR.wait(MUTEX.lock().unwrap());
-                thread::yield_now();
+                guard = CVAR.wait(guard).unwrap();
                 continue;
             }
             signals.clear();
@@ -137,7 +114,6 @@ pub fn set_handler<F>(signals: &[Signal], user_handler: F) where F: Fn(&[Signal]
             if mask & 256 != 0 { signals.push(Signal::Pipe) }
             if mask & 512 != 0 { signals.push(Signal::Alrm) }
             if mask & 1024 != 0 { signals.push(Signal::Term) }
-            MASK.store(0, Ordering::Relaxed);
             user_handler(&signals);
         }
     });
@@ -150,7 +126,7 @@ mod test {
     use std::sync::mpsc::sync_channel;
     use self::libc::c_int;
     use self::libc::{SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGABRT, SIGFPE, SIGKILL, SIGSEGV, SIGPIPE, SIGALRM, SIGTERM};
-    use super::{Signal};
+    use super::Signal;
     use super::platform::handler;
 
     fn to_os_signal(signal: Signal) -> c_int {
@@ -173,7 +149,12 @@ mod test {
     fn all_signals() {
         let signals = [Signal::Hup, Signal::Int, Signal::Quit, Signal::Abrt, Signal::Term];
         let (tx, rx) = sync_channel(0);
-        super::set_handler(&signals, move |signals| tx.send(signals.to_owned()).unwrap());
+        let mut signal_count = 0;
+        super::set_handler(&signals, move |signals| {
+            signal_count += signals.len();
+            println!("Handled {} signals", signal_count);
+            tx.send(signals.to_owned()).unwrap();
+        });
         // Check all signals one-by-one.
         for &signal in signals.iter() {
             handler(to_os_signal(signal));

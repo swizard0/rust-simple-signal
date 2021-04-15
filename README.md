@@ -23,6 +23,3 @@ fn main() {
 
 #### Try the example yourself
 `cargo run --example readme_example`
-
-## Building
-If you're using a nightly compiler, I suggest building with `cargo build --features nightly` to avoid the dependency on *lazy_static*. On stable and beta compilers, just run `cargo build`.
